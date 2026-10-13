@@ -1,3 +1,7 @@
+## 2.0.4
+
+- Find the python that a pipx (or other virtualenv) install of `pymobiledevice3` runs on when starting the RSD tunnel daemon. xcross no longer warns "no python >= 3.13 with pymobiledevice3 found" when the CLI's own interpreter is 3.13 or newer, and candidate interpreters are probed concurrently. ([#121](https://github.com/arxdeus/xcross/issues/121))
+
 ## 2.0.3
 
 - Build and run Flutter iOS apps in `--profile` and `--release` mode from Linux, Windows and macOS, x64 and arm64, like `flutter build ios`/`flutter run`: whole-program AOT kernels with flutter_tools' arguments and Dart plugin registrant, `App.framework` from the iOS `gen_snapshot` (on Linux and Windows the compiler [arxdeus/xcross_gen_snapshot](https://github.com/arxdeus/xcross_gen_snapshot) builds for that Flutter version and proves byte-identical to Flutter's), dSYMs next to the `.app`, `--split-debug-info` and `--obfuscate`. Profile runs serve the VM Service for DevTools.
