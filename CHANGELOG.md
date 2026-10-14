@@ -1,3 +1,7 @@
+## 2.0.5
+
+- Sign in to Apple again after GrandSlam began refusing (-80045) sign-ins whose client info platform does not match the anisette: xcross now presents Android client info matching its Android-derived local anisette. Apple Root CA - G3 is trusted for `gsd.apple.com` on Linux and Windows, and the HTTP 403 Apple now returns for SMS two-factor under Android anisette is explained with a fix (add a trusted Apple device). ([#127](https://github.com/arxdeus/xcross/pull/127))
+
 ## 2.0.4
 
 - Find the python that a pipx (or other virtualenv) install of `pymobiledevice3` runs on when starting the RSD tunnel daemon. xcross no longer warns "no python >= 3.13 with pymobiledevice3 found" when the CLI's own interpreter is 3.13 or newer, and candidate interpreters are probed concurrently. ([#121](https://github.com/arxdeus/xcross/issues/121))
