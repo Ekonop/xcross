@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:dart_mobile_device/src/errors.dart';
-import 'package:dart_mobile_device/src/gdb_remote_client.dart';
+import 'package:dart_mobile_device/shared/device/gdb_remote_client.dart';
+import 'package:dart_mobile_device/shared/errors/errors.dart';
 import 'package:test/test.dart';
+
+import 'test_device_sockets.dart';
+import 'test_log_output.dart';
 
 /// ASCII `$` — start-of-packet sentinel (mirrors the production wire format).
 const _packetStart = 0x24;
@@ -59,6 +62,57 @@ Stream<String> _incomingFrames(Socket socket, {List<int>? rawBytes}) {
 }
 
 void main() {
+  test(
+    'GDB connect uses injected failure without acquiring native socket',
+    () async {
+      final sockets = TestDeviceSockets(
+        connectFailure: StateError('fake denied'),
+      );
+      final client = GdbRemoteClient(
+        sockets: sockets,
+        log: testLog(),
+        host: '[fe80::1234%en0]',
+        port: 4567,
+      );
+      addTearDown(client.close);
+      await expectLater(
+        client.connect(),
+        throwsA(
+          isA<TunnelError>().having(
+            (error) => error.toString(),
+            'message',
+            contains('fake denied'),
+          ),
+        ),
+      );
+      expect(sockets.connections.single.host, 'fe80::1234%en0');
+    },
+  );
+
+  test('injected sockets receive unbracketed scoped IPv6 endpoint', () async {
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    server.listen((socket) {
+      addTearDown(socket.destroy);
+      socket.listen((_) {});
+    });
+    final sockets = TestDeviceSockets(
+      destination: (host: server.address.address, port: server.port),
+    );
+    final client = GdbRemoteClient(
+      sockets: sockets,
+      log: testLog(),
+      host: '[fe80::1234%en0]',
+      port: 4567,
+    );
+    addTearDown(client.close);
+    await client.connect();
+    expect(sockets.connections, [
+      (host: 'fe80::1234%en0', port: 4567, timeout: null),
+    ]);
+    expect(sockets.bindings, isEmpty);
+  });
+
   _stopSignalTests();
   // Pins the checksum format against a hand-computed value, independent of
   // the _frame() helper above — a shared bug in both would otherwise pass.
@@ -108,6 +162,8 @@ void main() {
     /// alongside the server-side socket for the accepted connection.
     Future<(GdbRemoteClient, Socket)> connectClient() async {
       final client = GdbRemoteClient(
+        sockets: TestDeviceSockets(),
+        log: testLog(),
         host: device.address.address,
         port: device.port,
       );
@@ -136,6 +192,24 @@ void main() {
       expect(rawBytes.first, '+'.codeUnitAt(0));
       expect(requests, isNotEmpty);
       expect(requests.first, _frame('QStartNoAckMode'));
+      expect(
+        String.fromCharCodes(rawBytes),
+        contains(
+          '${_frame('QStartNoAckMode')}+${_frame('QThreadSuffixSupported')}',
+        ),
+      );
+    });
+
+    test('start() stops if no-ack mode is rejected', () async {
+      final (client, socket) = await connectClient();
+      final requests = <String>[];
+      final sub = _incomingFrames(socket).listen((frame) {
+        requests.add(frame);
+        socket.add(_frame('').codeUnits);
+      });
+      addTearDown(sub.cancel);
+      await expectLater(client.start(), throwsA(isA<TunnelError>()));
+      expect(requests, [_frame('QStartNoAckMode')]);
     });
 
     test('attach() resolves on a T/S stop reply', () async {
@@ -292,6 +366,47 @@ void _stopSignalTests() {
       const packet = GdbReplyPacket(GdbReply.stopped, 'T05thread:1;');
       expect(packet.stopSignal, 5);
       expect(packet.isFatalStop, isFalse);
+    });
+
+    test('reports a Mach breakpoint trap instead of resuming it', () {
+      const packet = GdbReplyPacket(
+        GdbReply.stopped,
+        'T05thread:1;reason:exception;metype:6;medata:1;',
+      );
+      expect(packet.isFatalStop, isTrue);
+      expect(packet.stopFields['metype'], '6');
+    });
+
+    test('reports named debugger stops with and without reason fields', () {
+      for (final detail in [
+        'reason:breakpoint;',
+        'reason:watchpoint;',
+        'reason:unknown;',
+        'watch:100;',
+        'rwatch:100;',
+        'awatch:100;',
+        'swbreak:;',
+        'hwbreak:;',
+      ]) {
+        final packet = GdbReplyPacket(GdbReply.stopped, 'T05thread:1;$detail');
+        expect(packet.isFatalStop, isTrue);
+        expect(packet.stopReason, isNotNull);
+      }
+    });
+
+    test('reports unknown and malformed stops', () {
+      expect(
+        const GdbReplyPacket(GdbReply.stopped, 'T00thread:1;').isFatalStop,
+        isTrue,
+      );
+      expect(const GdbReplyPacket(GdbReply.stopped, 'T').isFatalStop, isTrue);
+    });
+
+    test('reports Mach bad access as a fault, not an attach hand-off', () {
+      const packet = GdbReplyPacket(GdbReply.stopped, 'T91thread:1;');
+      expect(packet.stopSignal, 145);
+      expect(packet.isFatalStop, isTrue);
+      expect(packet.stopDescription, contains('EXC_BAD_ACCESS'));
     });
 
     test('ignores non-stop packets', () {

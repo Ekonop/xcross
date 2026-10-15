@@ -1,6 +1,7 @@
 import 'dart:collection';
 
-import 'package:cli_kit/cli_kit.dart';
+import 'package:cli_kit/shared/tui/tui.dart';
+import 'package:meta/meta.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -83,7 +84,7 @@ void main() {
 
   test('run restores cooked mode when handling fails', () async {
     final terminal = FakeTerminal(bytes: [13]);
-    final tui = AnsiTui(terminal: terminal);
+    final tui = AnsiTui(terminal: terminal, useAnsi: true);
 
     await expectLater(
       tui.run(render: () => 'frame', handle: (_) => throw StateError('failed')),
@@ -95,7 +96,7 @@ void main() {
 
   test('prompts in cooked mode and restores raw mode', () {
     final terminal = FakeTerminal(lines: [' value ', 'yes']);
-    final tui = AnsiTui(terminal: terminal, useColor: true);
+    final tui = AnsiTui(terminal: terminal, useAnsi: true, useColor: true);
 
     expect(tui.prompt('Value'), 'value');
     expect(tui.confirm('Continue? [y/N]'), isTrue);
@@ -202,9 +203,11 @@ void main() {
   });
 }
 
+@internal
 String stripAnsi(String value) =>
     value.replaceAll(RegExp(r'\x1b\[[0-9;]*[A-Za-z]'), '');
 
+@internal
 final class FakeTerminal implements TuiTerminal {
   FakeTerminal({List<int> bytes = const [], List<String> lines = const []})
     : _bytes = Queue<int>.of(bytes),
