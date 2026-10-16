@@ -1,260 +1,163 @@
 {
-  description = "xcross Linux development environment";
+  description = "xcross: build, run, and hot-reload Flutter and Compose iOS apps from Linux";
 
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-
-    xcross-linux-x64 = {
-      url = "https://github.com/arxdeus/xcross/releases/download/v1.4.0/xcross-linux-x64.tar.gz";
-      flake = false;
-    };
-
-    xcross-linux-arm64 = {
-      url = "https://github.com/arxdeus/xcross/releases/download/v1.4.0/xcross-linux-arm64.tar.gz";
-      flake = false;
-    };
-  };
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
   outputs =
-    inputs@{ nixpkgs, ... }:
+    { self, nixpkgs }:
     let
-      xcrossVersion = "1.4.0";
-      swiftVersion = "6.3.3";
+      inherit (nixpkgs) lib;
 
       systems = [
         "x86_64-linux"
         "aarch64-linux"
       ];
 
-      eachSystem = nixpkgs.lib.genAttrs systems;
+      eachSystem = f: lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
 
-      xcrossReleases = {
-        x86_64-linux = inputs.xcross-linux-x64;
-        aarch64-linux = inputs.xcross-linux-arm64;
-      };
-
-      swiftToolchainSources = {
-        x86_64-linux = {
-          url = "https://download.swift.org/swift-${swiftVersion}-release/ubuntu2404/swift-${swiftVersion}-RELEASE/swift-${swiftVersion}-RELEASE-ubuntu24.04.tar.gz";
-          hash = "sha256-2oJypf3czWWxUp7Q5S4EUm4urdQjfVjWIg7+uXPGzRk=";
-        };
-        aarch64-linux = {
-          url = "https://download.swift.org/swift-${swiftVersion}-release/ubuntu2404-aarch64/swift-${swiftVersion}-RELEASE/swift-${swiftVersion}-RELEASE-ubuntu24.04-aarch64.tar.gz";
-          hash = "sha256-RxJjlUKWU/p2jTcGVYduwbaPapXHiE9eTxeXABQcm38=";
-        };
-      };
-
-      environmentFor =
-        system:
-        let
-          pkgs = import nixpkgs { inherit system; };
-          xcrossRelease = xcrossReleases.${system};
-          swiftToolchainSource = swiftToolchainSources.${system};
-
-          # pymobiledevice3 is vendored under setup/nix/pymobiledevice3/ cuz nixpkgs is mad old (7.7.0)
-          pymobiledevice3Python = pkgs.python313.override {
-            packageOverrides = import ./setup/nix/pymobiledevice3/overrides.nix { inherit (pkgs) lib; };
-          };
-
-          pymobiledevice3 =
-            pymobiledevice3Python.pkgs.callPackage ./setup/nix/pymobiledevice3/package.nix
-              { };
-          pymobiledevice3Env = pymobiledevice3Python.withPackages (_: [ pymobiledevice3 ]);
-
-          swiftToolchain = pkgs.stdenv.mkDerivation {
-            pname = "swift-toolchain";
-            version = swiftVersion;
-            src = pkgs.fetchurl {
-              inherit (swiftToolchainSource) url hash;
-            };
-            nativeBuildInputs = [ pkgs.autoPatchelfHook ];
-            buildInputs = [
-              pkgs.stdenv.cc.cc.lib
-              pkgs.zlib
-              pkgs.ncurses
-              pkgs.libxml2_13
-              pkgs.libedit
-              pkgs.curl
-              pkgs.libuuid
-              pkgs.python312 # note: needs to be 3.12 specifically, matching libpython3.12.so.1.0
-              pkgs.sqlite
-            ];
-
-            dontConfigure = true;
-            dontBuild = true;
-            autoPatchelfIgnoreMissingDeps = [ "libedit.so.2" ];
-
-            installPhase = ''
-              runHook preInstall
-              mkdir -p "$out"
-              cp -r usr/* "$out/"
-              runHook postInstall
-            '';
-            postFixup = ''
-              find $out -type f -executable -exec \
-                patchelf --replace-needed libedit.so.2 libedit.so.0 {} \; 2>/dev/null || true
-            '';
-          };
-
-          swiftCompiler = pkgs.writeShellScript "xcross-swiftc" ''
-            export LIBRARY_PATH="${pkgs.stdenv.cc.libc}/lib:${pkgs.stdenv.cc.cc.lib}/lib''${LIBRARY_PATH:+:$LIBRARY_PATH}"
-            export C_INCLUDE_PATH="${pkgs.stdenv.cc.libc.dev}/include''${C_INCLUDE_PATH:+:$C_INCLUDE_PATH}"
-            exec ${swiftToolchain}/bin/swiftc -use-ld=lld \
-              -Xclang-linker --gcc-toolchain=${pkgs.gcc.cc} \
-              -Xclang-linker -B${pkgs.stdenv.cc.libc}/lib \
-              "$@"
-          '';
-
-          runtimePackages = [
-            swiftToolchain
-            pkgs.llvmPackages_21.clang
-            pkgs.llvmPackages_21.llvm
-            pkgs.llvmPackages_21.lld
-            pkgs.git
-            pymobiledevice3Env
-            pkgs.usbmuxd
-            pkgs.libimobiledevice
-            pkgs.usbutils
-            pkgs.pkg-config
-            pkgs.gnupg
-          ];
-
-          xcross = pkgs.stdenvNoCC.mkDerivation {
-            pname = "xcross";
-            version = xcrossVersion;
-            src = xcrossRelease;
-
-            nativeBuildInputs = [ pkgs.makeWrapper ];
-
-            passthru = { inherit swiftToolchain swiftCompiler; };
-
-            dontBuild = true;
-            dontFixup = true;
-
-            installPhase = ''
-              runHook preInstall
-              mkdir -p "$out/bin" "$out/lib/xcross" "$out/share/licenses/xcross"
-              cp -r bin lib "$out/lib/xcross/"
-              install -m 0644 ${./LICENSE} "$out/share/licenses/xcross/LICENSE"
-              install -m 0644 ${./packages/apple_developer_kit/ADI_LICENSE} \
-                "$out/share/licenses/xcross/provision-dart.txt"
-
-              for executable in xcross xcrun; do
-                pathMode=--prefix
-                if [ "$executable" = xcrun ]; then
-                  pathMode=--suffix
-                fi
-                makeWrapper "$out/lib/xcross/bin/$executable" "$out/bin/$executable" \
-                  "$pathMode" PATH : ${pkgs.lib.makeBinPath runtimePackages} \
-                  --set SWIFT_EXEC ${swiftCompiler} \
-                  --set SWIFT_EXEC_MANIFEST ${swiftCompiler} \
-                  --set CC ${swiftToolchain}/bin/clang \
-                  --set CXX ${swiftToolchain}/bin/clang++
-                cmp "$src/bin/$executable" "$out/lib/xcross/bin/$executable"
-              done
-              runHook postInstall
-            '';
-
-            meta = {
-              description = "Build, run, and hot-reload Flutter iOS apps from Linux";
-              homepage = "https://github.com/arxdeus/xcross";
-              license = pkgs.lib.licenses.mit;
-              mainProgram = "xcross";
-              platforms = systems;
-            };
-          };
-
-          userPackages = [ xcross ] ++ runtimePackages;
-
-          contributorPackages = userPackages ++ [
-            pkgs.dart
-            pkgs.clang
-            pkgs.cmake
-            pkgs.ninja
-            pkgs.git
-            pkgs.unzip
-            pkgs.xz
-          ];
-
-          shellHook = ''
-            export SWIFT_EXEC=${swiftCompiler}
-            export SWIFT_EXEC_MANIFEST=${swiftCompiler}
-            export CC=${swiftToolchain}/bin/clang
-            export CXX=${swiftToolchain}/bin/clang++
-          '';
-
-          smokeCheck =
-            pkgs.runCommand "xcross-smoke-check"
-              {
-                nativeBuildInputs = [ xcross ];
-              }
-              ''
-                test -x ${xcross}/bin/xcross
-                test -x ${xcross}/bin/xcrun
-                test -d ${xcross}/lib/xcross/lib
-                cmp ${xcrossRelease}/bin/xcross ${xcross}/lib/xcross/bin/xcross
-                cmp ${xcrossRelease}/bin/xcrun ${xcross}/lib/xcross/bin/xcrun
-                touch "$out"
-              '';
-        in
-        {
-          inherit
-            pkgs
-            xcross
-            userPackages
-            contributorPackages
-            shellHook
-            smokeCheck
-            ;
-        };
+      scopeFor = pkgs: import ./setup/nix { inherit pkgs; };
     in
     {
+      # Builders for consumer flakes. Each takes the consumer's `pkgs` so the
+      # results live in the consumer's package set:
+      #
+      #   xcross.lib.mkXcrossShell {
+      #     inherit pkgs;
+      #     flutter = pkgs.flutter;      # required
+      #     jdk = pkgs.jdk21;            # optional, for Compose
+      #     settings = { ... };          # optional, merged over the defaults
+      #   }
+      #
+      # See docs/NixOS.md.
+      lib = {
+        scope = pkgs: scopeFor pkgs;
+        mkXcrossShell = { pkgs, ... }@args: (scopeFor pkgs).mkXcrossShell (removeAttrs args [ "pkgs" ]);
+        mkXcrossConfig =
+          { pkgs, ... }@args: (scopeFor pkgs).mkXcrossConfig (removeAttrs args [ "pkgs" ]);
+        mkXcrossSettings =
+          { pkgs, ... }@args: (scopeFor pkgs).mkXcrossSettings (removeAttrs args [ "pkgs" ]);
+      };
+
+      overlays.default = final: _: {
+        xcross = (scopeFor final).xcross;
+      };
+
       packages = eachSystem (
-        system:
+        pkgs:
         let
-          environment = environmentFor system;
+          scope = scopeFor pkgs;
         in
         {
-          inherit (environment) xcross;
-          default = environment.xcross;
+          inherit (scope)
+            xcross
+            swiftToolchain
+            pymobiledevice3
+            ;
+          default = scope.xcross;
         }
       );
 
-      apps = eachSystem (
-        system:
-        let
-          environment = environmentFor system;
-          app = {
-            type = "app";
-            program = "${environment.xcross}/bin/xcross";
-          };
-        in
-        {
-          xcross = app;
-          default = app;
-        }
-      );
+      apps = eachSystem (pkgs: {
+        default = {
+          type = "app";
+          program = lib.getExe self.packages.${pkgs.stdenv.hostPlatform.system}.xcross;
+          meta.description = "xcross CLI";
+        };
+      });
 
       devShells = eachSystem (
-        system:
+        pkgs:
         let
-          environment = environmentFor system;
+          scope = scopeFor pkgs;
         in
         {
-          default = environment.pkgs.mkShell {
-            packages = environment.userPackages;
-            inherit (environment) shellHook;
+          # End-user shell with the default configuration and nixpkgs' Flutter.
+          default = scope.mkXcrossShell {
+            flutter = pkgs.flutter;
+            jdk = pkgs.jdk21;
           };
 
-          contributor = environment.pkgs.mkShell {
-            packages = environment.contributorPackages;
-            inherit (environment) shellHook;
+          # Building xcross itself from this checkout.
+          contributor = pkgs.mkShell {
+            packages = scope.runtimePackages ++ [
+              pkgs.dart
+              pkgs.cmake
+              pkgs.ninja
+              pkgs.unzip
+              pkgs.xz
+            ];
+            SWIFT_EXEC = "${scope.swiftCompiler}";
+            SWIFT_EXEC_MANIFEST = "${scope.swiftCompiler}";
           };
         }
       );
 
-      checks = eachSystem (system: {
-        smoke = (environmentFor system).smokeCheck;
-      });
+      checks = eachSystem (
+        pkgs:
+        let
+          scope = scopeFor pkgs;
+          inherit (scope) xcross;
+          settings = scope.mkXcrossSettings {
+            flutter = pkgs.flutter;
+            jdk = pkgs.jdk21;
+            settings = {
+              roots.javaHome = null;
+              tools.custom = "/opt/custom";
+              excluded_commands = [ "setup" ];
+            };
+          };
+          config = scope.mkXcrossConfig { flutter = pkgs.flutter; };
+        in
+        {
+          # Merging semantics of `settings`.
+          settings =
+            assert !(settings.roots ? javaHome);
+            assert settings.tools.custom == "/opt/custom";
+            assert settings.tools.xcrun == "${xcross}/bin/xcrun";
+            assert settings.excluded_commands == [ "setup" ];
+            assert settings.environment.FLUTTER_ROOT == "${pkgs.flutter}";
+            pkgs.runCommand "xcross-settings-check" { } "touch $out";
+
+          # The patched release runs from the store and accepts its own config.
+          xcross =
+            pkgs.runCommand "xcross-check"
+              {
+                nativeBuildInputs = [ xcross ];
+                XCROSS_CONFIG = config;
+              }
+              ''
+                export HOME="$TMPDIR"
+                test "$(xcross --version)" = "xcross ${xcross.version}"
+                xcrun --version | grep -q 'xcrun version'
+                # --help loads and validates XCROSS_CONFIG before listing
+                # commands.
+                xcross --help >/dev/null
+                if xcross --help | grep -Eq '^[[:space:]]+(config|setup|update)[[:space:]]'; then
+                  echo "excluded commands are still listed" >&2
+                  exit 1
+                fi
+                test -x "$(command -v clang)"
+                touch "$out"
+              '';
+
+          swift =
+            pkgs.runCommand "xcross-swift-check" { nativeBuildInputs = [ scope.swiftToolchain ]; }
+              ''
+                swift --version | grep -q 'Swift version ${scope.swiftToolchain.version}'
+                ${scope.swiftToolchain}/bin/clang --version >/dev/null
+                ${scope.swiftToolchain}/bin/ld64.lld --version >/dev/null
+                touch "$out"
+              '';
+
+          pymobiledevice3 = pkgs.runCommand "xcross-pymobiledevice3-check" { } ''
+            export HOME="$TMPDIR"
+            ${scope.pymobiledevice3Env}/bin/python3 -c 'import pymobiledevice3'
+            ${scope.pymobiledevice3Env}/bin/pymobiledevice3 lockdown wifi-connections --help >/dev/null
+            touch "$out"
+          '';
+        }
+      );
+
+      formatter = eachSystem (pkgs: pkgs.nixfmt);
     };
 }

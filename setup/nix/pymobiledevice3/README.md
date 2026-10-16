@@ -32,7 +32,7 @@ builds:
 | `pyiosbackup.nix` | backup unpacking |
 | `asgimiddlewarestaticfile.nix`, `asgiwebdav.nix` | WebDAV |
 
-The flake wires this in through `pymobiledevice3Overlay` and builds both the
+`setup/nix/default.nix` wires this in as Python `packageOverrides` and builds both the
 package and a `python313.withPackages` env (`pymobiledevice3Env`), because
 `Pymd.tunneldInvocation()` probes for a python that can `import
 pymobiledevice3` — a plain interpreter cannot import a `buildPythonPackage`

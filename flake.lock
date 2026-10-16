@@ -18,35 +18,7 @@
     },
     "root": {
       "inputs": {
-        "nixpkgs": "nixpkgs",
-        "xcross-linux-arm64": "xcross-linux-arm64",
-        "xcross-linux-x64": "xcross-linux-x64"
-      }
-    },
-    "xcross-linux-arm64": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1788661026,
-        "narHash": "sha256-1KVhOlvPETtgPae4mXH+o6n68/dVRiQEfiGGtoVmruA=",
-        "type": "tarball",
-        "url": "https://github.com/arxdeus/xcross/releases/download/v1.4.0/xcross-linux-arm64.tar.gz"
-      },
-      "original": {
-        "type": "tarball",
-        "url": "https://github.com/arxdeus/xcross/releases/download/v1.4.0/xcross-linux-arm64.tar.gz"
-      }
-    },
-    "xcross-linux-x64": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1788661049,
-        "narHash": "sha256-N88Nj86Gu8j0qZebKSLD/ZsoooMtWABuOqhCVWdbgEY=",
-        "type": "tarball",
-        "url": "https://github.com/arxdeus/xcross/releases/download/v1.4.0/xcross-linux-x64.tar.gz"
-      },
-      "original": {
-        "type": "tarball",
-        "url": "https://github.com/arxdeus/xcross/releases/download/v1.4.0/xcross-linux-x64.tar.gz"
+        "nixpkgs": "nixpkgs"
       }
     }
   },
