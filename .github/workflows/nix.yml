@@ -56,7 +56,7 @@ jobs:
       # Runs inside the Nix build sandbox, which has no /lib loader, /usr/lib
       # or FHS paths: the same conditions as NixOS.
       - name: Check flake
-        run: nix flake check --print-build-logs
+        run: nix flake check --print-build-logs --keep-going
 
       - name: Check consumer flake
         env:

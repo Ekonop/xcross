@@ -143,7 +143,7 @@
           swift =
             pkgs.runCommand "xcross-swift-check" { nativeBuildInputs = [ scope.swiftToolchain ]; }
               ''
-                swift --version | grep -q 'Swift version ${scope.swiftToolchain.version}'
+                swift --version 2>&1 | grep -qF 'Swift version ${lib.versions.majorMinor scope.swiftToolchain.version}'
                 ${scope.swiftToolchain}/bin/clang --version >/dev/null
                 ${scope.swiftToolchain}/bin/ld64.lld --version >/dev/null
                 touch "$out"
