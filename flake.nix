@@ -146,11 +146,22 @@
               '';
 
           swift =
-            pkgs.runCommand "xcross-swift-check" { nativeBuildInputs = [ scope.swiftToolchain ]; }
+            pkgs.runCommand "xcross-swift-check"
+              {
+                nativeBuildInputs = scope.runtimePackages;
+                SWIFT_EXEC = scope.swiftCompiler;
+                SWIFT_EXEC_MANIFEST = scope.swiftCompiler;
+              }
               ''
+                export HOME="$TMPDIR"
                 swift --version 2>&1 | grep -qF 'Swift version ${lib.versions.majorMinor scope.swiftToolchain.version}'
                 ${scope.swiftToolchain}/bin/clang --version >/dev/null
                 ${scope.swiftToolchain}/bin/ld64.lld --version >/dev/null
+                # A host build exercises the manifest link, swift-autolink-extract
+                # and the glibc/GCC runtime wiring in SWIFT_EXEC.
+                swift package init --package-path probe --type executable --name probe
+                swift build --package-path probe
+                probe/.build/debug/probe | grep -q 'Hello'
                 touch "$out"
               '';
 
