@@ -103,7 +103,10 @@ jobs:
             python3 -c 'import pymobiledevice3'
             package="$(mktemp -d)"
             swift package init --package-path "$package" --type executable --name probe
-            swift build --package-path "$package"
+            # xcross drives SwiftPM with the native build system (see
+            # build_plan.dart), so probe the same engine.
+            swift build --build-system native --package-path "$package"
+            "$package/.build/debug/probe" | grep -q 'Hello'
           SH
 
       # The Apple SDK is private and only restored for branches in this
