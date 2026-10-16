@@ -127,12 +127,16 @@
               }
               ''
                 export HOME="$TMPDIR"
-                test "$(xcross --version)" = "xcross ${xcross.version}"
-                xcrun --version | grep -q 'xcrun version'
+                set -x
+                version="$(xcross --version 2>&1)"
+                printf '%s\n' "$version"
+                [[ "$version" == *"xcross ${xcross.version}"* ]]
+                xcrun --version 2>&1 | tee /dev/stderr | grep -q 'xcrun version'
                 # --help loads and validates XCROSS_CONFIG before listing
                 # commands.
-                xcross --help >/dev/null
-                if xcross --help | grep -Eq '^[[:space:]]+(config|setup|update)[[:space:]]'; then
+                xcross --help > help.txt 2>&1 || { cat help.txt; exit 1; }
+                cat help.txt
+                if grep -Eq '^[[:space:]]+(config|setup|update)[[:space:]]' help.txt; then
                   echo "excluded commands are still listed" >&2
                   exit 1
                 fi
