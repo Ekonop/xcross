@@ -41,6 +41,10 @@ let
       done
     done
     ln -s usr/lib "$out/lib"
+    # The driver also resolves swiftrt.o and the runtime under <sdk>/usr/lib.
+    for name in swift swift_static; do
+      [ -e "${swiftToolchain}/lib/$name" ] && ln -sfn "${swiftToolchain}/lib/$name" "$out/usr/lib/$name"
+    done
   '';
 
   # Host links go through the toolchain's <triple>.cfg (see
