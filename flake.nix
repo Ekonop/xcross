@@ -157,11 +157,15 @@
                 swift --version 2>&1 | grep -qF 'Swift version ${lib.versions.majorMinor scope.swiftToolchain.version}'
                 ${scope.swiftToolchain}/bin/clang --version >/dev/null
                 ${scope.swiftToolchain}/bin/ld64.lld --version >/dev/null
-                # A host build exercises the manifest link, swift-autolink-extract
-                # and the glibc/GCC runtime wiring in SWIFT_EXEC.
-                swift package init --package-path probe --type executable --name probe
-                swift build --package-path probe
-                probe/.build/debug/probe | grep -q 'Hello'
+                # A host executable exercises the <triple>.cfg wiring: the Nix
+                # loader, glibc, the GCC runtime and LLD. `swift build` runs in
+                # the consumer shell in CI.
+                printf 'import Glibc\nprint("hello \\(getpid() > 0)")\n' > probe.swift
+                swiftc probe.swift -o probe
+                ./probe | grep -qx 'hello true'
+                printf 'int main(void) { return 0; }\n' > probe.c
+                ${scope.swiftToolchain}/bin/clang probe.c -o probe-c
+                ./probe-c
                 touch "$out"
               '';
 
