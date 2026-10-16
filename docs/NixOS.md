@@ -160,8 +160,10 @@ explicit configuration or environment still wins.
   running. `setup/nix/patch-dart-aot.py` patches only the runtime and
   re-appends the snapshot.
 - **Swift** is the upstream Ubuntu 24.04 build, patched with
-  `autoPatchelfHook`. `xcross-swiftc` points it at the store glibc and GCC
-  runtime and at LLD for host links (SwiftPM manifests and plugins).
+  `autoPatchelfHook`. A clang config file for the Linux triple
+  (`bin/<triple>.cfg`) points host compiles and links (SwiftPM manifests and
+  plugins) at the store glibc, GCC runtime, loader, and LLD. Apple targets
+  don't read it.
 - **pymobiledevice3** in nixpkgs is too old for Wi-Fi tunnels (`remotepairing`)
   and its `pyimg4` is marked broken. It is packaged in `setup/nix/pymobiledevice3`.
 

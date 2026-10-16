@@ -25,50 +25,17 @@ let
     inherit (sources.swift) version sources;
   };
 
-  # The upstream swiftc expects Ubuntu's glibc, loader and GCC runtime layout
-  # when it links host executables (SwiftPM manifests and plugins). Point host
-  # links at the Nix store equivalents and at LLD. Apple targets (iOS builds
-  # through the Darwin SDK) are passed through untouched.
-  swiftcWrapper = pkgs.writeShellScript "swiftc" ''
-    for argument in "$@"; do
-      case "$argument" in
-        *-apple-*) exec ${swiftToolchain}/bin/swiftc -use-ld=lld "$@" ;;
-        @*)
-          if [ -f "''${argument#@}" ] && grep -q -- '-apple-' "''${argument#@}"; then
-            exec ${swiftToolchain}/bin/swiftc -use-ld=lld "$@"
-          fi
-          ;;
-      esac
-    done
-    export LIBRARY_PATH="${pkgs.stdenv.cc.libc}/lib:${pkgs.stdenv.cc.cc.lib}/lib''${LIBRARY_PATH:+:$LIBRARY_PATH}"
-    export C_INCLUDE_PATH="${lib.getDev pkgs.stdenv.cc.libc}/include''${C_INCLUDE_PATH:+:$C_INCLUDE_PATH}"
-    exec ${swiftToolchain}/bin/swiftc -use-ld=lld \
-      -Xclang-linker --gcc-toolchain=${pkgs.stdenv.cc.cc} \
-      -Xclang-linker -B${pkgs.stdenv.cc.libc}/lib \
-      -Xlinker --dynamic-linker=$(cat ${pkgs.stdenv.cc}/nix-support/dynamic-linker) \
-      -Xlinker -rpath=${pkgs.stdenv.cc.cc.lib}/lib \
-      "$@"
-  '';
-
-  # SwiftPM and swift-build find swift-autolink-extract, libclang and
-  # libSwiftScan relative to SWIFT_EXEC, so the wrapper lives in a mirror of
-  # the toolchain layout instead of on its own.
-  swiftCompilerToolchain = pkgs.runCommand "xcross-swiftc-toolchain" { } ''
-    mkdir -p "$out/bin"
-    for entry in ${swiftToolchain}/*; do
-      [ "$(basename "$entry")" = bin ] || ln -s "$entry" "$out/"
-    done
-    ln -s ${swiftToolchain}/bin/* "$out/bin/"
-    rm "$out/bin/swiftc"
-    install -m 0755 ${swiftcWrapper} "$out/bin/swiftc"
-  '';
-  swiftCompiler = "${swiftCompilerToolchain}/bin/swiftc";
+  # Host links and C imports are wired through the toolchain's
+  # <triple>.cfg (see swift-toolchain.nix), so the real swiftc is used as is.
+  # Pointing SWIFT_EXEC at it keeps SwiftPM on this toolchain even when other
+  # Swift installations are on PATH.
+  swiftCompiler = "${swiftToolchain}/bin/swiftc";
 
   # Order matters: the Swift toolchain's clang/lld come first so `clang`
   # resolves to the unwrapped compiler that can target iOS. The wrapped LLVM
   # clang after it supplies the host `cc` for native-asset hooks.
   runtimePackages = [
-    swiftCompilerToolchain
+    swiftToolchain
     llvmPackages.clang
     llvmPackages.llvm
     llvmPackages.lld
