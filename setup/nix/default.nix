@@ -25,17 +25,47 @@ let
     inherit (sources.swift) version sources;
   };
 
-  # Host links and C imports are wired through the toolchain's
-  # <triple>.cfg (see swift-toolchain.nix), so the real swiftc is used as is.
-  # Pointing SWIFT_EXEC at it keeps SwiftPM on this toolchain even when other
-  # Swift installations are on PATH.
-  swiftCompiler = "${swiftToolchain}/bin/swiftc";
+  # Host links go through the toolchain's <triple>.cfg (see
+  # swift-toolchain.nix). The Swift ClangImporter does not read clang config
+  # files, so host (non-Apple) swiftc invocations also get the store glibc
+  # headers, appended with -idirafter so they never shadow anything. Apple
+  # targets (iOS, simulator) are passed through untouched.
+  swiftcWrapper = pkgs.writeShellScript "swiftc" ''
+    for argument in "$@"; do
+      case "$argument" in
+        *-apple-*) exec ${swiftToolchain}/bin/swiftc "$@" ;;
+        @*)
+          if [ -f "''${argument#@}" ] && grep -q -- '-apple-' "''${argument#@}"; then
+            exec ${swiftToolchain}/bin/swiftc "$@"
+          fi
+          ;;
+      esac
+    done
+    exec ${swiftToolchain}/bin/swiftc \
+      -Xcc -idirafter -Xcc ${lib.getDev pkgs.stdenv.cc.libc}/include \
+      "$@"
+  '';
+
+  # SwiftPM finds swift-autolink-extract, libclang and libSwiftScan relative
+  # to SWIFT_EXEC, so the wrapper lives in a mirror of the toolchain layout.
+  swiftCompilerToolchain = pkgs.runCommand "xcross-swiftc-toolchain" { } ''
+    mkdir -p "$out/bin"
+    for entry in ${swiftToolchain}/*; do
+      [ "$(basename "$entry")" = bin ] || ln -s "$entry" "$out/"
+    done
+    for entry in ${swiftToolchain}/bin/*; do
+      ln -s "$entry" "$out/bin/"
+    done
+    rm "$out/bin/swiftc"
+    install -m 0755 ${swiftcWrapper} "$out/bin/swiftc"
+  '';
+  swiftCompiler = "${swiftCompilerToolchain}/bin/swiftc";
 
   # Order matters: the Swift toolchain's clang/lld come first so `clang`
   # resolves to the unwrapped compiler that can target iOS. The wrapped LLVM
   # clang after it supplies the host `cc` for native-asset hooks.
   runtimePackages = [
-    swiftToolchain
+    swiftCompilerToolchain
     llvmPackages.clang
     llvmPackages.llvm
     llvmPackages.lld
