@@ -25,25 +25,40 @@ let
     inherit (sources.swift) version sources;
   };
 
+  # The Swift driver locates glibc (for `import Glibc` and the C stdlib) under
+  # the SDK root, which defaults to `/`. Give host compiles an FHS-shaped view
+  # of the store glibc, kernel headers and GCC runtime instead.
+  hostSysroot = pkgs.runCommand "xcross-host-sysroot" { } ''
+    mkdir -p "$out/usr/include" "$out/usr/lib"
+    for dir in ${lib.getDev pkgs.stdenv.cc.libc}/include ${pkgs.linuxHeaders}/include; do
+      for entry in "$dir"/*; do
+        [ -e "$out/usr/include/$(basename "$entry")" ] || ln -s "$entry" "$out/usr/include/"
+      done
+    done
+    for dir in ${pkgs.stdenv.cc.libc}/lib ${pkgs.stdenv.cc.cc.lib}/lib ${pkgs.stdenv.cc.cc}/lib; do
+      for entry in "$dir"/*; do
+        [ -e "$out/usr/lib/$(basename "$entry")" ] || ln -s "$entry" "$out/usr/lib/"
+      done
+    done
+    ln -s usr/lib "$out/lib"
+  '';
+
   # Host links go through the toolchain's <triple>.cfg (see
-  # swift-toolchain.nix). The Swift ClangImporter does not read clang config
-  # files, so host (non-Apple) swiftc invocations also get the store glibc
-  # headers, appended with -idirafter so they never shadow anything. Apple
-  # targets (iOS, simulator) are passed through untouched.
+  # swift-toolchain.nix). Host (non-Apple) swiftc invocations also get the
+  # sysroot above. Apple targets (iOS, simulator), which bring their own
+  # -sdk, are passed through untouched.
   swiftcWrapper = pkgs.writeShellScript "swiftc" ''
     for argument in "$@"; do
       case "$argument" in
-        *-apple-*) exec ${swiftToolchain}/bin/swiftc "$@" ;;
+        *-apple-* | -sdk) exec ${swiftToolchain}/bin/swiftc "$@" ;;
         @*)
-          if [ -f "''${argument#@}" ] && grep -q -- '-apple-' "''${argument#@}"; then
+          if [ -f "''${argument#@}" ] && grep -qE -- '-apple-|^-sdk$' "''${argument#@}"; then
             exec ${swiftToolchain}/bin/swiftc "$@"
           fi
           ;;
       esac
     done
-    exec ${swiftToolchain}/bin/swiftc \
-      -Xcc -idirafter -Xcc ${lib.getDev pkgs.stdenv.cc.libc}/include \
-      "$@"
+    exec ${swiftToolchain}/bin/swiftc -sdk ${hostSysroot} "$@"
   '';
 
   # SwiftPM finds swift-autolink-extract, libclang and libSwiftScan relative
