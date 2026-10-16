@@ -25,15 +25,28 @@ let
     inherit (sources.swift) version sources;
   };
 
-  # The upstream swiftc expects Ubuntu's glibc and GCC runtime layout when it
-  # links host executables (SwiftPM manifests and plugins). Point it at the
-  # Nix store equivalents and at LLD.
+  # The upstream swiftc expects Ubuntu's glibc, loader and GCC runtime layout
+  # when it links host executables (SwiftPM manifests and plugins). Point host
+  # links at the Nix store equivalents and at LLD. Apple targets (iOS builds
+  # through the Darwin SDK) are passed through untouched.
   swiftcWrapper = pkgs.writeShellScript "swiftc" ''
+    for argument in "$@"; do
+      case "$argument" in
+        *-apple-*) exec ${swiftToolchain}/bin/swiftc -use-ld=lld "$@" ;;
+        @*)
+          if [ -f "''${argument#@}" ] && grep -q -- '-apple-' "''${argument#@}"; then
+            exec ${swiftToolchain}/bin/swiftc -use-ld=lld "$@"
+          fi
+          ;;
+      esac
+    done
     export LIBRARY_PATH="${pkgs.stdenv.cc.libc}/lib:${pkgs.stdenv.cc.cc.lib}/lib''${LIBRARY_PATH:+:$LIBRARY_PATH}"
     export C_INCLUDE_PATH="${lib.getDev pkgs.stdenv.cc.libc}/include''${C_INCLUDE_PATH:+:$C_INCLUDE_PATH}"
     exec ${swiftToolchain}/bin/swiftc -use-ld=lld \
       -Xclang-linker --gcc-toolchain=${pkgs.stdenv.cc.cc} \
       -Xclang-linker -B${pkgs.stdenv.cc.libc}/lib \
+      -Xlinker --dynamic-linker=$(cat ${pkgs.stdenv.cc}/nix-support/dynamic-linker) \
+      -Xlinker -rpath=${pkgs.stdenv.cc.cc.lib}/lib \
       "$@"
   '';
 
