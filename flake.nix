@@ -127,7 +127,6 @@
               }
               ''
                 export HOME="$TMPDIR"
-                set -x
                 version="$(xcross --version 2>&1)"
                 printf '%s\n' "$version"
                 [[ "$version" == *"xcross ${xcross.version}"* ]]
@@ -140,7 +139,9 @@
                   echo "excluded commands are still listed" >&2
                   exit 1
                 fi
-                test -x "$(command -v clang)"
+                # The wrapper prepends the runtime: the Swift toolchain's clang
+                # must win over any wrapped compiler.
+                grep -q '${xcross.swiftToolchain}/bin' ${xcross}/bin/xcross
                 touch "$out"
               '';
 
