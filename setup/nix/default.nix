@@ -52,6 +52,10 @@ let
   # sysroot above. Apple targets (iOS, simulator), which bring their own
   # -sdk, are passed through untouched.
   swiftcWrapper = pkgs.writeShellScript "swiftc" ''
+    # -frontend, -modulewrap and --driver-mode must stay the first argument.
+    case "''${1-}" in
+      -frontend | -modulewrap | --driver-mode=*) exec ${swiftToolchain}/bin/swiftc "$@" ;;
+    esac
     for argument in "$@"; do
       case "$argument" in
         *-apple-* | -sdk) exec ${swiftToolchain}/bin/swiftc "$@" ;;
