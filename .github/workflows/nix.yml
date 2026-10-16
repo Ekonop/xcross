@@ -50,6 +50,11 @@ jobs:
         with:
           persist-credentials: false
 
+      # Before the consumer flake locks this checkout as a path input.
+      - name: Checkout examples
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        run: git -c protocol.version=2 submodule update --init --depth 1 examples
+
       - name: Install Nix
         uses: DeterminateSystems/determinate-nix-action@2a0be2498974c2b6327e19780488744384637d88 # v3.21.7
 
@@ -119,10 +124,6 @@ jobs:
       - name: Restore Darwin SDK
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         uses: ./.github/actions/setup-darwin-sdk
-
-      - name: Checkout examples
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        run: git -c protocol.version=2 submodule update --init --depth 1 examples
 
       - name: Build Flutter example
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
