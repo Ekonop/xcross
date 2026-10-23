@@ -89,6 +89,17 @@ The resulting app is written under `build/xcross-ios/`. Add `--ipa` to
 produce an `.ipa`. Switch back to Flutter 3.47.7 for debug work by
 restoring `/opt/flutter` (or the default Flutter SDK) to `PATH`.
 
+To install and run a release AOT build directly on the connected iPhone:
+
+```
+export PATH="/home/vansh/flutter-3.47.6/bin:/home/vansh/.local/bin:/home/vansh/.local/share/swiftly/bin:$PATH"
+export LD_LIBRARY_PATH="/home/vansh/.local/lib:${LD_LIBRARY_PATH:-}"
+source /home/vansh/.local/share/swiftly/env.sh
+cd /home/vansh/xcross_smoke_test
+xcross-dev flutter run --release
+```
+
+## Verification results
 
 - `dart analyze` for `apple_developer_kit` and `xcross`: pass
 - `dart test` for `apple_developer_kit`: pass
@@ -97,8 +108,10 @@ restoring `/opt/flutter` (or the default Flutter SDK) to `PATH`.
 - Dev build `xcross-dev --version`: `xcross unreleased (unreleased build)`
 - Apple authentication with the dev build: success
 - Debug iOS build/sign/install: success
-- Automatic device launch: failed via pymobiledevice3 process control
-- Manual app open: works and shows the expected Flutter debug-mode message
+- Release AOT compilation via `gen_snapshot` (Flutter 3.47.6): success
+- Release iOS build/sign/install on physical device: success
+- Automatic device launch: rejected on iOS 27.0.1 via pymobiledevice3 process control (known iOS 27 protocol limitation)
+- Manual app launch on physical iPhone (iOS 27.0.1): **PASS** (verified on-screen and fully interactive)
 
 ## Known limitations
 
