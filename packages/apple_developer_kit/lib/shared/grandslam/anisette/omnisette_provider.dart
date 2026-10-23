@@ -48,8 +48,7 @@ abstract interface class OmnisetteSocket {
 
 /// Opens [OmnisetteSocket]s, injectable so tests can run the provisioning
 /// handshake without a live server.
-typedef OmnisetteSocketConnector =
-    Future<OmnisetteSocket> Function(Uri uri);
+typedef OmnisetteSocketConnector = Future<OmnisetteSocket> Function(Uri uri);
 
 Future<OmnisetteSocket> _connectSocket(Uri uri) async {
   final channel = WebSocketChannel.connect(uri);
@@ -152,9 +151,7 @@ final class OmnisetteAnisetteProvider implements AnisetteProvider {
   }
 
   Future<AnisetteState> _ensureProvisioned(AnisetteState state) async {
-    if (state.provisioned &&
-        state.routingInfo != null &&
-        state.adiPb != null) {
+    if (state.provisioned && state.routingInfo != null && state.adiPb != null) {
       return state;
     }
 
@@ -178,10 +175,9 @@ final class OmnisetteAnisetteProvider implements AnisetteProvider {
       );
       final cpim = base64Decode(_requiredField(cpimMessage, 'cpim'));
 
-      final finish = await _postProvisioning(
-        endpoints.midFinishProvisioning,
-        {'cpim': base64Encode(cpim)},
-      );
+      final finish = await _postProvisioning(endpoints.midFinishProvisioning, {
+        'cpim': base64Encode(cpim),
+      });
       final ptm = base64Decode(GrandSlamResponse.stringField(finish, 'ptm'));
       final tk = base64Decode(GrandSlamResponse.stringField(finish, 'tk'));
       routingInfo = int.parse(
@@ -271,9 +267,7 @@ final class OmnisetteAnisetteProvider implements AnisetteProvider {
   Future<String> _fetchClientInfo() async {
     final cached = _clientInfo;
     if (cached != null) return cached;
-    final response = await _http.get(
-      Uri.parse('$_baseUrl/v3/client_info'),
-    );
+    final response = await _http.get(Uri.parse('$_baseUrl/v3/client_info'));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw AppleError(
         'Omnisette client_info failed (HTTP ${response.statusCode})',
@@ -286,9 +280,7 @@ final class OmnisetteAnisetteProvider implements AnisetteProvider {
       throw AppleError('Omnisette client_info returned non-JSON: $e');
     }
     if (decoded is! Map) {
-      throw const AppleError(
-        'Omnisette client_info returned non-object JSON',
-      );
+      throw const AppleError('Omnisette client_info returned non-object JSON');
     }
     return _clientInfo = _requiredField(
       decoded.cast<String, Object?>(),

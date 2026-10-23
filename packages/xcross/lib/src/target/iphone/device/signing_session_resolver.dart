@@ -189,6 +189,13 @@ final class SigningSessionResolver implements SigningSessionProvider {
     final anisette = OmnisetteAnisetteProvider(
       hostServices: hostServices,
       httpClient: httpClients.create(),
+      baseUrl: (() {
+        final value = hostServices.host.environment.values['XCROSS_ANISETTE_URL']
+            ?.trim();
+        return (value != null && value.isNotEmpty)
+            ? value
+            : kDefaultOmnisetteUrl;
+      })(),
     );
     final client = DeveloperServicesClient.fromSession(
       session,

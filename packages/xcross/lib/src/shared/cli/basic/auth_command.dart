@@ -244,6 +244,14 @@ final class AuthCommand extends ParsedCommand<AuthArgs, void> {
       throw XcrossError('--apple-id requires a non-empty email address.');
     }
 
+    final configuredAnisetteUrl = (() {
+      final value = hostServices.host.environment.values['XCROSS_ANISETTE_URL']
+          ?.trim();
+      return (value != null && value.isNotEmpty)
+          ? value
+          : kDefaultOmnisetteUrl;
+    })();
+
     commandPrompt.write(
       'Heads up:\n'
       '  This works by emulating a virtual Mac to interact with Apple\n'
@@ -253,12 +261,18 @@ final class AuthCommand extends ParsedCommand<AuthArgs, void> {
       '  since this is a private API.\n',
     );
 
+    commandPrompt.write(
+      '  Anisette provider: mac-omnisette ($configuredAnisetteUrl)\n'
+      '  Configure a different compatible provider with XCROSS_ANISETTE_URL.\n',
+    );
+
     // Credentials before any await: keeps interactive stdin simple on Windows.
     final (:username, :password) = _readAppleIdCredentials(appleId);
 
     final anisette = OmnisetteAnisetteProvider(
       httpClient: createHttpClient(),
       hostServices: hostServices,
+      baseUrl: configuredAnisetteUrl,
     );
     GrandSlamClient? loginClient;
     GrandSlamAppTokenExchange? tokenExchange;
