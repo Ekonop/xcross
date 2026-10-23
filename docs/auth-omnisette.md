@@ -68,7 +68,27 @@ mv ~/.local/xcross-dev/bin/xcross ~/.local/xcross-dev/bin/xcross-dev
 ln -sf ~/.local/xcross-dev/bin/xcross-dev ~/.local/bin/xcross-dev
 ```
 
-## Verification performed
+## Release builds
+
+Release/profile builds require an iOS `gen_snapshot` AOT compiler. The
+`xcross_gen_snapshot` project currently publishes one for Flutter 3.47.6
+(engine `692136cb`), but not for Flutter 3.47.7 (engine `deb28748`).
+
+To make release builds work on this machine, use the separately cloned
+Flutter 3.47.6 SDK without changing the main Flutter 3.47.7:
+
+```
+export PATH="/home/vansh/flutter-3.47.6/bin:/home/vansh/.local/bin:/home/vansh/.local/share/swiftly/bin:$PATH"
+export LD_LIBRARY_PATH="/home/vansh/.local/lib:${LD_LIBRARY_PATH:-}"
+source /home/vansh/.local/share/swiftly/env.sh
+cd /home/vansh/xcross_smoke_test
+xcross-dev flutter build --release
+```
+
+The resulting app is written under `build/xcross-ios/`. Add `--ipa` to
+produce an `.ipa`. Switch back to Flutter 3.47.7 for debug work by
+restoring `/opt/flutter` (or the default Flutter SDK) to `PATH`.
+
 
 - `dart analyze` for `apple_developer_kit` and `xcross`: pass
 - `dart test` for `apple_developer_kit`: pass
